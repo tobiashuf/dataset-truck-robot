@@ -15,9 +15,9 @@ release you used and reference instances by their qualified `id`
 
 ---
 
-## [1.0.0]
+## [1.0.0] — 2026-09-18
 
-First public release.
+First public release. Archived on Zenodo: [10.5281/zenodo.22833476](https://doi.org/10.5281/zenodo.22833476)
 
 ### Added
 

@@ -106,8 +106,8 @@ Two dumps are published per release. Both are produced from the same database.
 
 | Dump | Size (gzipped) | Contains | Where |
 |---|---|---|---|
-| **core** | ~2.900 MB | everything **except** `raw_data.travel_matrices` | in this repository, under [`database/`](database/) |
-| **full** | ~1.616 GB | everything, including travel matrices | GitHub release asset and Zenodo |
+| **core** | ~2.9 MB | everything **except** `raw_data.travel_matrices` | in this repository, under [`database/`](database/) |
+| **full** | ~1.6 GB | everything, including travel matrices | GitHub release asset and Zenodo |
 
 Use the **core** dump to browse the dataset, understand the schema, and select the
 instances you need — it clones with the repository and restores in seconds.

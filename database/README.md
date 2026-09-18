@@ -34,11 +34,11 @@ travel matrix table is simply empty.
 
 ## Release manifest
 
-**Version:** `v1.0.0` — not yet released
-**Schemas published:** `metadata`, `raw_data`
-**PostgreSQL version used to create the dumps:** 18.3
-**Minimum PostgreSQL version required to restore:** 13
-**Zenodo DOI:** _assigned on release_
+- **Version:** `v1.0.0` — released 2026-09-18
+- **Schemas published:** `metadata`, `raw_data`
+- **PostgreSQL version used to create the dumps:** 18.3
+- **Minimum PostgreSQL version required to restore:** 13
+- **Zenodo DOI:** [10.5281/zenodo.22833476](https://doi.org/10.5281/zenodo.22833476)
 
 ### Contents of this release
 

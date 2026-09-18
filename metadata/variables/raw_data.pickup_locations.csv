@@ -1,0 +1,13 @@
+﻿variable,data_type,unit,nullable,key,domain,description
+key,integer,-,no,PK,positive integer,"Surrogate primary key, generated as an identity column. Internal, not stable across releases."
+id,varchar(50),-,no,,"P-<n>, e.g. 'P-3'","Pickup location identifier, unique within the instance. Referenced by raw_data.customers.parcel_origin_id and by raw_data.travel_matrices through the shared per-instance location namespace."
+x_coordinate,double precision,-,no,,real,"Planar x coordinate in the same frame as raw_data.customers. The scale is instance-set specific and carries NO dataset-wide unit -- it is NOT meters and differs between publications. NOT a geographic coordinate. Never derive a distance from coordinates; use raw_data.travel_matrices."
+y_coordinate,double precision,-,no,,real,Planar y coordinate in the same frame as x_coordinate. Same caveats apply.
+z_coordinate,double precision,[m],yes,,real,Elevation above the frame's reference level. NULL for batches with flat topography.
+zone_restriction,text,-,yes,,zone identifier,Access-restricted zone containing this location. NULL means unrestricted.
+location_type,varchar(50),-,no,,Parcel Pickup Point,"Kind of pickup location. Distinguishes facility types that differ in accessibility or opening hours. Open set: further facility types may appear in later releases."
+served_by,varchar(50),-,yes,,"Robot, Truck, Optional",Vehicle class eligible to serve this location. 'Optional' means either vehicle may serve it.
+charging_station,boolean,-,yes,"","true, false",TRUE if the truck can recharge at this location.
+time_window_start,double precision,[s],yes,,non-negative,"Earliest permitted service start, relative to the start of the planning horizon (t = 0, corresponding to 08:00). NOT a time of day. NULL if no time window applies."
+time_window_end,double precision,[s],yes,,non-negative,"Latest permitted service start, relative to the start of the planning horizon. NULL if no time window applies."
+instance_key,integer,-,no,FK,references metadata.instances(key),"Instance this location belongs to. ON DELETE CASCADE. This table is empty for batches whose problem variant has no pickup requests."

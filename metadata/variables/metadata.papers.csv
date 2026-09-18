@@ -1,0 +1,10 @@
+﻿variable,data_type,unit,nullable,key,domain,description
+key,integer,-,no,PK,positive integer,"Surrogate primary key. Internal identifier, not stable across dataset releases. Use for joins only; never cite it."
+id,varchar(255),-,no,AK,"P<n> for the dataset authors' publications","Stable short identifier of the publication, e.g. 'P5'. Use this to reference a publication."
+authors,text,-,no,,"free text, format 'Lastname I., Lastname I.'","Author list of the publication, in the order given by the publication."
+title,varchar(255),-,no,,free text,Title of the publication.
+keywords,text,-,yes,,free text,Keywords of the publication. NULL if none were recorded.
+journal,varchar(255),-,yes,,free text,"Journal the publication appeared in. NULL while the publication is unpublished, forthcoming or under review."
+doi,varchar(255),-,yes,,"DOI without resolver prefix, e.g. '10.1002/net.22030'","Digital Object Identifier of the publication. NULL while unpublished. Prefix with https://doi.org/ to resolve."
+publication_date,date,-,yes,,ISO date,Date of publication. NULL while unpublished. Day precision is nominal for journals that publish by issue.
+description,text,-,yes,,free text,"Notes on the publication and its relation to this dataset."

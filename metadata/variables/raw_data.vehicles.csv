@@ -1,0 +1,5 @@
+﻿variable,data_type,unit,nullable,key,domain,description
+key,integer,-,no,PK,positive integer,"Surrogate primary key, generated always as an identity column. Internal, not stable across releases."
+id,varchar(100),-,no,AK,"diesel_truck, e_truck, sc_robot","Stable vehicle identifier. Use this rather than key to refer to a vehicle type. Open set: further vehicle types may appear in later releases. A cataloged vehicle type need not carry rows in raw_data.vehicle_parameters: only the types a batch actually parametrizes appear there."
+vehicle_type,text,-,no,,"Ground, Autonomous","Broad vehicle class. 'Ground' denotes a truck, 'Autonomous' a delivery robot. Use this to separate truck from robot parameters when reading raw_data.vehicle_parameters."
+description,text,-,yes,,free text,Free-text description of the vehicle type. NULL where none was recorded.

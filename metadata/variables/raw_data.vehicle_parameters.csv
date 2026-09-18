@@ -1,0 +1,44 @@
+﻿variable,data_type,unit,nullable,key,domain,description
+instance_batch_key,integer,-,no,"PK, FK",references metadata.instance_batches(key),"Instance batch this parametrization applies to. Vehicle parameters attach to the BATCH, not to an individual instance: all instances of a batch share one parametrization. ON DELETE CASCADE."
+vehicle_key,integer,-,no,"PK, FK",references raw_data.vehicles(key),"Vehicle type being parametrized. Join raw_data.vehicles to separate truck rows (vehicle_type = 'Ground') from robot rows (vehicle_type = 'Autonomous'). ON DELETE CASCADE. Not every cataloged vehicle type necessarily carries rows here."
+max_robots,integer,[-],yes,,non-negative integer,Maximum number of robots carried on the truck. NULL for robot rows and for batches that do not bound the carried fleet.
+initial_robots,integer,[-],yes,,non-negative integer,"Number of robots loaded on the truck at the depot. NULL for robot rows."
+max_parcels,integer,[-],yes,,positive integer,Maximum number of parcels the vehicle can carry. NULL where parcel capacity is not modeled.
+initial_parcels,integer,[-],yes,,non-negative integer,Number of parcels loaded at the depot. NULL where not modeled.
+cost_per_distance,double precision,[EUR/m],yes,,non-negative,"Distance-dependent operating cost. IS in SI: per METRE, not per kilometer, e.g., 0.2 EUR/km is stored as 0.0002. Multiply by 1000 to recover the familiar figure. Combines directly with the distances in m in raw_data.travel_matrices."
+cost_per_energy,double precision,[EUR/J],yes,,non-negative,Energy price used to cost energy consumption. IS in SI: per JOULE.
+cost_per_time,double precision,[EUR/s],yes,,non-negative,"Time-dependent cost, typically the driver wage. IS in SI: per SECOND, not per hour, so a wage of 30 EUR/h is stored as 0.008333333333333333. Multiply by 3600 to recover the familiar figure. Combines directly with durations in s."
+delay_cost,double precision,[EUR/s],yes,,non-negative,"Penalty cost per unit of delay beyond a customer deadline. IS in SI: per SECOND, not per hour -- 5 EUR/h is stored as 0.001388888888888889. Multiply by 3600 to recover the familiar figure. NULL for batches that do not permit or do not penalize delay."
+fuel_to_emission_factor,double precision,[kg/m^3],yes,,non-negative,"Conversion from fuel (liter) consumed to CO2-equivalent emissions. Parameter of the emission model. IS in SI: per CUBIC METRE of fuel, not per litre."
+energy_to_emission_factor,double precision,[kg/J],yes,,non-negative,"Conversion from energy consumed to CO2-equivalent emissions. Parameter of the emission model. IS in SI: per JOULE, not per kWh."
+emission_to_cost_factor,double precision,[EUR/kg],yes,,non-negative,"Monetary valuation of emissions, used where the objective internalises emission cost."
+service_time,double precision,[s],yes,,non-negative,Handling/service time per served request at a customer or location to drop off the robots. Distinct from travel and waiting time.
+time_per_interruption,double precision,[s],yes,,non-negative,"Duration of a single interruption stop, for example a traffic-light or pedestrian-crossing stop for a robot or a truck. NULL where interruptions are not modeled."
+interruption_rate,double precision,[m],yes,,non-negative,"Expected number of interruption stops per unit of TRAVEL DISTANCE, for example traffic-light or pedestrian-crossing stops for a robot every 100 meters. Multiply by travel time to obtain the expected number of stops. NULL where interruptions are not modeled."
+speed_min,double precision,[m/s],yes,,non-negative,"Minimum travel speed. Where only one speed applies, a batch may record the same value in speed_min and speed_max. Note the unit: 30 km/h is stored as 8.333333333333334 and 5 km/h as 1.3888888888888888."
+speed_max,double precision,[m/s],yes,,non-negative,Maximum travel speed. Potentially NULL where a speed range is not modeled.
+acceleration,double precision,[m/s^2],yes,,non-negative,Acceleration used in the kinematic component of the energy model.
+deceleration,double precision,[m/s^2],yes,,non-negative,"Deceleration, reported as a POSITIVE magnitude, not as a negative value."
+curb_weight,double precision,[kg],yes,,positive,Empty vehicle weight. Together with the payload it forms the total mass in the energy model.
+rotation_mass_factor,double precision,[-],yes,,"typically slightly above 1",Correction factor accounting for the inertia of rotating drivetrain components.
+max_load,double precision,[kg],yes,,positive,Maximum payload mass. NULL where weight capacity is not modeled.
+max_distance,double precision,[m],yes,,positive,Maximum distance per tour. NULL where tour length is unbounded.
+frontal_area,double precision,[m^2],yes,,positive,Frontal surface area used in the aerodynamic drag term of the energy model.
+fuel_air_mass_ratio,double precision,[-],yes,,positive,Fuel-to-air mass ratio. Parameter of the combustion engine model.
+engine_friction_factor,double precision,[J/m^3],yes,,positive,"Engine friction factor. IS in SI: joules per cubic meter of displacement per revolution, not kJ/(rev*L)."
+engine_speed,double precision,[1/s],yes,,positive,"Engine speed, i.e. revolutions per second expressed as a plain reciprocal second. Parameter of the combustion engine model."
+engine_displacement,double precision,[m^3],yes,,positive,"Engine displacement. IS in SI: cubic meters, not litres -- a 3 L engine is 0.003 m^3."
+fuel_heating_value,double precision,[J/kg],yes,,positive,"Lower heating value of the fuel. IS in SI: joules per kilogram, not kJ/g. Parameter of the combustion engine model."
+fuel_density,double precision,[kg/m^3],yes,,positive,"Fuel density. IS in SI: kilograms per cubic meter, not g/L. Converts between fuel mass and fuel volume in the emission model."
+engine_efficiency,double precision,[-],yes,,"(0, 1]",Engine efficiency parameter.
+drivetrain_efficiency,double precision,[-],yes,,"(0, 1]",Drivetrain efficiency: share of engine output reaching the wheels.
+recuperated_kinetic_energy,double precision,[-],yes,,"[0, 1]",Share of kinetic energy recovered when braking. 0 for vehicles without regenerative braking.
+recuperated_descent_energy,double precision,[-],yes,,"[0, 1]",Share of potential energy recovered when descending. Meaningful only for batches with non-flat topography.
+auxiliary_power_draw,double precision,[W],yes,,non-negative,"Constant power draw of auxiliary systems such as cooling or electronics, independent of motion. IS in SI: watts, not kW."
+battery_capacity,double precision,[J],yes,,"positive, or Infinity","Usable battery capacity. IS in SI: joules, not kWh. Infinity denotes a non-binding battery, i.e. energy is not a limiting resource in that batch. Never cast to integer."
+charging_rate,double precision,[W],yes,,"positive, or Infinity","Charging power at a charging station. IS in SI: watts, not kW. Infinity denotes instantaneous recharging. Never cast to integer."
+energy_consumption,double precision,[J/m],yes,,non-negative,"Distance-specific energy consumption, used as a simplified alternative where the detailed emission model is not applied. IS in SI: joules per meter, not kWh/m."
+drag_coefficient,double precision,[-],yes,,positive,Aerodynamic drag coefficient. Used with frontal_area and air_density in the drag term.
+rolling_resistance_coefficient,double precision,[-],yes,,positive,Rolling resistance coefficient of the tires on the road surface.
+air_density,double precision,[kg/m^3],yes,,positive,Air density assumed in the aerodynamic drag term.
+gravity_constant,double precision,[m/s^2],yes,,"approximately 9.81",Gravitational acceleration assumed in the rolling resistance and gradient terms.

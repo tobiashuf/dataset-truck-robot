@@ -1,0 +1,519 @@
+# =============================================================================
+# Instance generator -- reference
+# =============================================================================
+# This file records what is true of the INSTANCE GENERATOR ITSELF: which inputs
+# it asks for, which modes each input offers, which value a chosen mode ends up
+# as in the database, and which parameters are preset rather than entered at
+# every run.
+#
+# Division of labour:
+#
+#   metadata.instance_batches   the parameters of every batch that was actually
+#                               generated. AUTHORITATIVE. Query it.
+#   generator.yaml (this file)  what the generator can be asked for, in the
+#                               generator's own terminology, plus the presets
+#                               that are the same for every run.
+#
+# Where this file and the database disagree, the database is right: a preset
+# here is the starting point of a generation session, not a record of what was
+# run.
+#
+# Publication of the generator source code is work in progress; it is intended
+# to be released on GitHub shortly.
+#
+# NOTE: The generator's output directory is a local path in the authors'
+# environment and is deliberately not recorded here.
+# =============================================================================
+
+generator:
+  name: Truck-and-Robot Instance Generator
+  version: 1.0.0
+  released: null
+  interface: >-
+    Jupyter notebook driving a set of ipywidgets input panels, one per
+    parameter group. The group numbering below is the generator's own.
+  publication_status: >-
+    Work in progress. The source code is not part of this repository yet and
+    is intended to be published on GitHub shortly.
+  supported_papers: [1, 2, 3, 4, 5, 6]
+
+# ---------------------------------------------------------------------------
+# Parameter groups -- the generator's input panels
+# ---------------------------------------------------------------------------
+# One entry per panel, in the order in which the generator presents them.
+#
+#   inputs      the values a run is asked for
+#   options     the choices an input offers, where the choice is a plain label
+#   modes       the choices an input offers, where the generator carries an
+#               internal code for the choice
+#   stored_as   the label written to the database for that choice, given
+#               wherever it differs from the label shown in the interface
+#
+# Inputs are entered in the units named below (km, km/h, EUR/km, EUR/h, min).
+# The database stores strict SI; the unit of every column is documented in
+# metadata/variables/.
+parameter_groups:
+
+  - step: 1
+    id: output_target
+    title: Output target
+    inputs:
+      - name: Destination
+        options:
+          - Database              # written to the PostgreSQL schemas of this dataset
+          - Excel                 # written as workbooks
+      - name: Excel layout
+        applies_if: Destination = Excel
+        options: [Default, Customized]
+    note: >-
+      The output path itself is a local path in the authors' environment and is
+      not part of the published dataset.
+
+  - step: 2
+    id: paper_selection
+    title: Publication
+    inputs:
+      - name: Publication the instances are generated for
+        meaning: >-
+          One of the publications catalogued in metadata.papers; the selection
+          determines which publication has to be cited when the instances are
+          used.
+
+  - step: 3
+    id: city_and_network
+    title: City and network infrastructure
+    inputs:
+      - name: City
+        meaning: >-
+          Dropdown over the cities in spatial_basis.city_catalog below. The
+          city fixes the road and sidewalk networks as well as the elevation
+          tile used as the spatial basis.
+      - name: Altitude
+        modes:
+          - label: Real altitude of the city
+            meaning: elevations taken from the SRTM tile of the selected city
+          - label: Custom altitudes
+            meaning: >-
+              synthetic elevations; requires the two inputs below
+      - name: Height difference
+        applies_if: Altitude = Custom altitudes
+        unit: m
+        meaning: altitude spread covered by the generated topography
+      - name: Height volatility
+        applies_if: Altitude = Custom altitudes
+        unit: "[-]"
+        meaning: >-
+          smoothness of the generated topography; higher values produce more
+          frequent and more drastic elevation changes over the same spread
+
+  - step: 4
+    id: area
+    title: Service area
+    inputs:
+      - name: Area size
+        unit: km x km
+        example: 4 x 4
+    note: >-
+      Recorded as a descriptive label in m, so an entry of 4 x 4 becomes
+      '4000 x 4000 m'. The label is descriptive only -- the coordinates in
+      raw_data are not on a metre scale.
+
+  - step: 5
+    id: low_emission_zones
+    title: Low emission zones (LEZ)
+    inputs:
+      - name: Reference of the percentage
+        modes:
+          - {code: a, label: Share of area,      meaning: the percentage refers to the share of the total service area covered by the zones}
+          - {code: c, label: Share of customers, meaning: the percentage refers to the share of customers located inside the zones}
+      - name: Percentage
+        unit: "%"
+        note: entered as a percentage, recorded as a share in [0, 1]
+      - name: Number of zones
+        unit: "[-]"
+        meaning: >-
+          number of separate zones the restricted share is spread over, e.g. a
+          10 % share may be split into three distinct zones
+    note: >-
+      Locations inside a zone are marked with the zone code 'LEZ'. A truck may
+      be barred from such a location while a robot is not.
+
+  - step: 6
+    id: truck
+    title: Truck
+    inputs:
+      - {name: Initial robots on the truck,  unit: "[-]"}
+      - {name: Maximum robots on the truck,  unit: "[-]"}
+      - {name: Initial parcels on the truck, unit: "[-]"}
+      - {name: Maximum parcels on the truck, unit: "[-]"}
+      - {name: Distance-dependent cost,      unit: EUR/km}
+      - {name: Time-dependent cost,          unit: EUR/h, meaning: driver wage}
+      - {name: Delay cost,                   unit: EUR/h, meaning: penalty per unit of delay beyond a customer deadline}
+      - {name: Minimum speed,                unit: km/h}
+      - {name: Maximum speed,                unit: km/h}
+      - {name: Handling time,                unit: s,     meaning: service time per request including the release of robots}
+
+  - step: 7
+    id: robot
+    title: Robot
+    inputs:
+      - {name: Time-dependent cost,  unit: EUR/h}
+      - {name: Delay cost,           unit: EUR/h}
+      - {name: Minimum speed,        unit: km/h}
+      - {name: Maximum speed,        unit: km/h}
+      - {name: Range,                unit: km,    meaning: maximum distance per tour}
+      - {name: Battery capacity,     unit: h,     meaning: hours of operation on a full battery}
+      - {name: Charging rate,        unit: 1/h,   meaning: share of the battery recharged per hour}
+      - {name: Energy consumption,   unit: kWh/km}
+      - {name: Handling time,        unit: s}
+      - {name: Curb weight,          unit: kg,    meaning: weight of the empty robot}
+      - {name: Maximum load,         unit: kg,    meaning: maximum transportable mass}
+
+  - step: 8
+    id: depot
+    title: Depot
+    inputs:
+      - name: Depot location
+        options:
+          - {label: Origin,            stored_as: Centered,            meaning: placed at the origin of the frame -- the centre of the service area}
+          - {label: Upper left corner, stored_as: Left-upper Corner,   meaning: placed in the upper left corner of the service area}
+          - {label: Random,            stored_as: Random,              meaning: coordinates drawn at random}
+      - name: Robots available at the depot
+        unit: "[-]"
+        meaning: >-
+          robots stationed at the truck depot; a positive count means robots
+          may additionally be released from the depot and not only from robot
+          hubs, drop-off points and customer sites
+    note: The depot occurs exactly once per instance and carries the id 'DP'.
+
+  - step: 9
+    id: customers
+    title: Customers
+    inputs:
+      - {name: Total number of customers, unit: "[-]"}
+      - {name: Share of pickup customers, unit: "%", meaning: customers whose parcel originates at a pickup location}
+      - {name: Share of return customers, unit: "%", meaning: customers whose parcel is collected and returned}
+      - name: Mandatory service per customer segment
+        asked_for: [Regular customers, Pickup customers, Return customers]
+        inputs:
+          - {name: Share of truck customers, unit: "%", stored_as: "served_by = 'Truck'",    meaning: must be visited by the truck}
+          - {name: Share of robot customers, unit: "%", stored_as: "served_by = 'Robot'",    meaning: must be visited by a robot}
+          - {name: Remainder,                            stored_as: "served_by = 'Optional'", meaning: not entered; whatever is left may be served by either vehicle}
+    note: >-
+      The remaining share after the pickup and return shares are regular
+      delivery customers. The three shares above are asked separately for each
+      of the three segments. The unconstrained case is recorded as the literal
+      'Optional', never as NULL.
+
+  - step: 10
+    id: pickup_locations
+    title: Pickup locations
+    inputs:
+      - name: Number of pickup locations
+        modes:
+          - {label: Random,         stored_as: Random,         meaning: number drawn at random up to the number of pickup customers}
+          - {label: Fixed number,   stored_as: Fixed,          meaning: a number entered explicitly}
+          - {label: Customer-based, stored_as: Customer-based, meaning: an average number of customers per pickup location is entered -- the count then scales with the number of customers}
+      - name: Placement
+        options:
+          - {label: Centered,         stored_as: Centered, meaning: placed towards the centre of the service area}
+          - {label: Depot-dependent,  stored_as: Flexible, meaning: placed relative to the depot}
+          - {label: Random,           stored_as: Flexible, meaning: coordinates drawn at random}
+        note: >-
+          The recorded label distinguishes only 'Centered' from 'Flexible';
+          depot-dependent and random placement are both recorded as 'Flexible'.
+      - name: Served by
+        inputs:
+          - {name: Share of mandatory truck visits, unit: "%", stored_as: "served_by = 'Truck'"}
+          - {name: Share of mandatory robot visits, unit: "%", stored_as: "served_by = 'Robot'"}
+          - {name: Remainder,                                  stored_as: "served_by = 'Optional'"}
+    note: Pickup locations carry ids of the form 'P-<n>'.
+
+  - step: 11
+    id: customer_to_pickup_location_assignment
+    title: Customer to pickup location assignment
+    inputs:
+      - name: Assignment rule
+        options:
+          - {label: Random, stored_as: Random,   meaning: customers are assigned to pickup locations at random}
+          - {label: Even,   stored_as: Assigned, meaning: every pickup location receives a similar number of customers}
+          - {label: Manual, stored_as: Assigned, meaning: customers or their number per location are assigned by hand}
+
+  - step: 12
+    id: dropoff_points
+    title: Drop-off points
+    inputs:
+      - name: Number of drop-off points
+        options:
+          - {label: Fixed number,                meaning: a number entered explicitly}
+          - {label: Percentage of all customers, meaning: the count scales with the number of customers}
+      - name: Placement
+        modes:
+          - {code: r, label: Random, stored_as: Random, meaning: coordinates drawn at random}
+          - {code: e, label: Equal,  stored_as: Equal,  meaning: points distributed evenly over the service area}
+    note: >-
+      Drop-off points carry ids of the form 'S-<n>'. Robots may be released
+      there, but no robots are stationed there.
+
+  - step: 13
+    id: robot_hubs
+    title: Robot hubs
+    inputs:
+      - name: Number of robot hubs
+        options:
+          - {label: Fixed number,                meaning: a number entered explicitly}
+          - {label: Percentage of all customers, meaning: the count scales with the number of customers}
+      - name: Placement
+        modes:
+          - {code: r, label: Random, stored_as: Random, meaning: coordinates drawn at random}
+          - {code: e, label: Equal,  stored_as: Equal,  meaning: hubs distributed evenly over the service area}
+    note: Robot hubs carry ids of the form 'R-<n>'.
+
+  - step: 14
+    id: robots_per_robot_hub
+    title: Available robots per robot hub
+    inputs:
+      - name: Initial robot availability
+        modes:
+          - {code: f, label: Fixed,          stored_as: Fixed,               meaning: every robot hub holds the same number of robots}
+          - {code: r, label: Random,         stored_as: Random / Variable,   meaning: drawn per hub within an interval}
+          - {code: c, label: Customer-based, meaning: derived from the customer-to-pickup-location ratio with a lower bound per hub}
+          - {code: m, label: Manual,         meaning: entered by hand per hub}
+      - name: Maximum robot capacity
+        options: [Fixed, Random]
+        meaning: robot capacity of a hub, which is what makes reallocation between hubs a constrained decision
+    note: >-
+      The rules above are recorded per batch; the realized per-hub counts are
+      recorded per location. A non-binding fleet or capacity is recorded as
+      Infinity, not as a large number -- never cast those columns to integer.
+
+  - step: 15
+    id: time_windows_pickup_locations
+    title: Time windows -- pickup locations
+    inputs:
+      - name: Time window length
+        options:
+          - {label: None,         meaning: no time window applies; recorded as NULL}
+          - {label: Fixed,        meaning: one length in min for every pickup location}
+          - {label: Random range, meaning: length drawn per location from an entered interval}
+          - {label: Manual,       meaning: length entered by hand}
+      - name: Placement within the planning horizon
+        options:
+          - {label: Depot-dependent, stored_as: Depot Dependent,      meaning: derived from the direct depot-to-location travel time}
+          - {label: Random,          stored_as: Location Independent, meaning: placed at random within the horizon independent of the location}
+
+  - step: 16
+    id: time_windows_customers
+    title: Time windows -- customers
+    inputs:
+      - name: Time window length
+        options:
+          - {label: None,         meaning: the batch models no customer time windows; recorded as NULL}
+          - {label: Fixed,        meaning: one length in min for every customer}
+          - {label: Random range, meaning: length drawn per customer from an entered interval}
+      - name: Placement within the planning horizon -- regular and return customers
+        options:
+          - {label: Depot-dependent, stored_as: Depot Dependent,      meaning: derived from the direct depot-to-customer travel time}
+          - {label: Random,          stored_as: Location Independent, meaning: placed at random within the horizon}
+      - name: Placement within the planning horizon -- pickup customers
+        options:
+          - {label: Depot-dependent,           stored_as: Depot Dependent,           meaning: derived from the direct depot-to-customer travel time}
+          - {label: Pickup-location-dependent, stored_as: Pickup Location Dependent, meaning: derived from the window of the assigned pickup location}
+          - {label: Random,                    stored_as: Location Independent,      meaning: placed at random within the horizon}
+    note: >-
+      Depot-dependent windows multiply the direct depot-to-customer travel
+      time by a factor drawn per customer from the deadline multiplier
+      interval; see preset_parameters.deadlines below.
+
+  - step: 17
+    id: number_of_datasets
+    title: Number of datasets
+    inputs:
+      - {name: Number of instances generated per batch, unit: "[-]"}
+
+# ---------------------------------------------------------------------------
+# What "not modeled" looks like
+# ---------------------------------------------------------------------------
+not_modeled_semantics: >-
+  Access-restricted zones, topography, energy and emissions, parcel weights
+  and time windows are OPTIONAL components. A batch models them only if the
+  corresponding inputs were set. Otherwise the matching database columns are
+  NULL, which means 'not applicable to this batch' -- never zero. The one
+  exception is the unconstrained vehicle assignment, which is recorded as the
+  literal string 'Optional' rather than as NULL.
+
+# ---------------------------------------------------------------------------
+# Randomization
+# ---------------------------------------------------------------------------
+randomization:
+  rng: numpy.random.Generator (PCG64), created via numpy.random.default_rng
+  seeded: true
+  seed_scope: per_run
+  seed_values: 2023
+  note: >-
+    A single seed is fixed in the generator configuration and drives the whole
+    generation run. Re-running the generator with the same configuration and
+    the same seed reproduces the same instances; a different number of
+    instances or a changed parameter shifts the draw sequence, so individual
+    instances are not stable against configuration changes.
+
+# ---------------------------------------------------------------------------
+# Planning horizon
+# ---------------------------------------------------------------------------
+planning_horizon:
+  window: 08:00 to 18:00
+  duration_s: 36000
+  note: >-
+    All time windows and deadlines in raw_data are relative to the start of
+    this horizon, t = 0, which corresponds to 08:00. They are NOT times of
+    day. Where a location has no time window, the generator treats its window
+    as the full planning horizon, but the database records NULL -- meaning
+    "not applicable" -- rather than 0 and 36000.
+
+# ---------------------------------------------------------------------------
+# Spatial basis
+# ---------------------------------------------------------------------------
+spatial_basis:
+  elevation_source: >-
+    SRTM elevation tiles (.hgt), one tile per city, selected by the city's
+    anchor coordinate.
+  anchor_convention: >-
+    Each city carries a geographic anchor (latitude, longitude) marking the
+    centre of the service area. The anchor is used to select the elevation
+    tile and to place the area; it is NOT written to the database, and the
+    coordinates in raw_data are not georeferenced.
+  coordinate_frame: >-
+    Planar and local to the instance set. The coordinate scale is NOT meters
+    and differs between publications; values may be negative. Never derive a
+    distance from coordinates -- use raw_data.travel_matrices.
+  city_catalog:
+    # Anchor coordinates and elevation tile per selectable city.
+    - {city: Atlanta,       anchor: [33.7490, -84.3880],                     srtm_tile: N33W085.hgt}
+    - {city: Chicago,       anchor: [41.90339166569783, -87.66748453130094], srtm_tile: N41W088.hgt, note: West Town}
+    - {city: Copenhagen,    anchor: [55.6761, 12.5683],                      srtm_tile: N55E012.hgt}
+    - {city: Edinburgh,     anchor: [55.9533, -3.1883],                      srtm_tile: N55W004.hgt}
+    - {city: Genova,        anchor: [44.4048, 8.9444],                       srtm_tile: N44E008.hgt}
+    - {city: Hong Kong,     anchor: [22.276625068005373, 114.15430956288661], srtm_tile: N22E114.hgt, note: harbour centre}
+    - {city: Lisbon,        anchor: [38.73046827337861, -9.145495764292338],  srtm_tile: N38W010.hgt, note: Picoas}
+    - {city: London,        anchor: [51.5074, -0.1278],                      srtm_tile: N51W001.hgt}
+    - {city: Melbourne,     anchor: [-37.8136, 144.9631],                    srtm_tile: S38E144.hgt}
+    - {city: Miami,         anchor: [25.7617, -80.1918],                     srtm_tile: N25W081.hgt}
+    - {city: Munich,        anchor: [48.1375, 11.5750],                      srtm_tile: N48E011.hgt, note: Marienplatz}
+    - {city: Paris,         anchor: [48.8566, 2.3522],                       srtm_tile: N48E002.hgt}
+    - {city: San Francisco, anchor: [37.78131202190548, -122.42748518365035], srtm_tile: N37W123.hgt, note: Western Addition}
+    - {city: Seoul,         anchor: [37.5665, 126.9780],                     srtm_tile: N37E126.hgt}
+    - {city: Tokyo,         anchor: [35.6609400016615, 139.69853422824775],  srtm_tile: N35E139.hgt, note: Shibuya}
+
+# ---------------------------------------------------------------------------
+# Customer sampling
+# ---------------------------------------------------------------------------
+customer_sampling:
+  candidate_pool_size: 100000
+  note: >-
+    Customer locations are drawn from a pre-built pool of candidate locations
+    on the network rather than from continuous coordinates. The pool size is a
+    generator setting and is not recorded per batch in the database.
+
+# ---------------------------------------------------------------------------
+# Vehicle catalog
+# ---------------------------------------------------------------------------
+# raw_data.vehicles is the catalog. A cataloged vehicle type need not carry
+# vehicle_parameters rows: only the types a batch actually parametrizes appear
+# there.
+vehicles:
+  diesel_truck: {vehicle_type: Ground}
+  e_truck:      {vehicle_type: Ground}
+  sc_robot:     {vehicle_type: Autonomous}
+
+# ---------------------------------------------------------------------------
+# Preset parameters
+# ---------------------------------------------------------------------------
+# The parameters below are configured ONCE in the generator and are NOT part
+# of the input panels above: they do not have to be entered again at every run
+# of the tool. They remain changeable -- a session may override any of them --
+# but the values given here are the standing configuration.
+#
+# They describe the generator's capability, not any particular batch. To find
+# out what a batch actually models, query its columns; where a value below
+# disagrees with the database, the database is right.
+preset_parameters:
+
+  units_note: >-
+    The values below are given in the GENERATOR's units, which are the
+    conventional units of the emission-model literature (kJ/g, g/L, L, rev/s,
+    kW, kWh, kg/L, per km). The corresponding database columns are strict SI
+    and the unit of each one is documented in
+    metadata/variables/raw_data.vehicle_parameters.csv. The energy and
+    emission columns have never been populated, so the conversion between the
+    two has never been exercised -- verify it before first use.
+
+  emission_conversion:
+    fuel_to_emission_factor: 3.477      # kg/L
+    energy_to_emission_factor: 0.363    # kg/kWh
+    emission_to_cost_factor: 0.5160     # EUR/kg
+
+  kinematics:
+    # m/s^2; deceleration as a positive magnitude
+    diesel_truck: {acceleration: 1.0, deceleration: 1.5}
+    e_truck:      {acceleration: 1.5, deceleration: 1.5}
+    sc_robot:     {acceleration: 0.3, deceleration: 0.4}
+
+  mass_and_geometry:
+    # curb_weight and max_load in kg, frontal_area in m^2
+    diesel_truck: {curb_weight: 3000, max_load: 1300, rotation_mass_factor: 1.1, frontal_area: 5.0}
+    e_truck:      {curb_weight: 3500, max_load: 1300, rotation_mass_factor: 1.1, frontal_area: 5.0}
+    sc_robot:     {curb_weight: 40,   max_load: 8,    rotation_mass_factor: 1.2, frontal_area: 0.2}
+
+  resistance_and_environment:
+    diesel_truck: {drag_coefficient: 0.65, rolling_resistance_coefficient: 0.01}
+    e_truck:      {drag_coefficient: 0.65, rolling_resistance_coefficient: 0.01}
+    sc_robot:     {drag_coefficient: 0.70, rolling_resistance_coefficient: 0.03}
+    air_density: 1.2041           # kg/m^3
+    gravity_constant: 9.80665     # m/s^2 -- scipy.constants.g
+    road_grade_angle: 0.0         # rad
+
+  combustion_engine:
+    diesel_truck:
+      fuel_air_mass_ratio: 1.0
+      engine_friction_factor: 0.02    # kJ/(rev*L)
+      engine_speed: 33                # rev/s
+      engine_displacement: 3          # L
+      fuel_heating_value: 44          # kJ/g  -- diesel
+      fuel_density: 830               # g/L   -- diesel
+      tau: 0.0                        # m/s^2, additional acceleration term
+    e_truck: null                     # not applicable -- electric drive
+    sc_robot: null                    # not applicable -- electric drive
+
+  efficiency:
+    diesel_truck: {engine_efficiency: 0.45, drivetrain_efficiency: 0.94}
+    e_truck:      {engine_efficiency: 0.81, drivetrain_efficiency: 0.94}
+    sc_robot:     {engine_efficiency: 0.81, drivetrain_efficiency: 0.90}
+
+  recuperation:
+    # share of energy recovered, [0, 1]
+    diesel_truck: {kinetic: null, descent: null}   # not applicable -- no recuperation
+    e_truck:      {kinetic: 0.4,  descent: 0.3}
+    sc_robot:     {kinetic: 0.1,  descent: 0.05}
+
+  auxiliary_power_draw:
+    diesel_truck: null              # not modeled
+    e_truck: 2.7                    # W
+    sc_robot: 0.05                  # W
+
+  interruptions:
+    # time_per_interruption in s, interruption_rate per km
+    diesel_truck: {time_per_interruption: 30, interruption_rate: 0.4}
+    e_truck:      {time_per_interruption: 30, interruption_rate: 0.4}
+    sc_robot:     {time_per_interruption: 10, interruption_rate: 0.1}
+    note: >-
+      An interruption is a single stop on the way, for example at a traffic
+      light or a pedestrian crossing.
+
+  deadlines:
+    factor_deadline_truck: [7, 11]
+    factor_deadline_robot: [7, 11]
+    note: >-
+      Interval of the multiplier drawn per customer and applied to the direct
+      depot-to-customer travel time to obtain that customer's deadline. Wider
+      intervals produce looser time windows. Each batch records the interval it
+      was generated with -- read the column, not this preset.

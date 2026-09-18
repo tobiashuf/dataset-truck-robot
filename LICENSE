@@ -1,0 +1,90 @@
+Creative Commons Attribution-NoDerivatives 4.0 International (CC BY-ND 4.0)
+===============================================================================
+
+Licensed Material
+-----------------
+The Truck-and-Robot Instance Dataset: the database dumps published with this
+repository and the accompanying documentation, schema definitions, variable
+descriptions, generation parameters and example queries.
+
+Licensor
+--------
+Tobias Huf
+
+Grant
+-----
+The Licensed Material is made available under the Creative Commons
+Attribution-NoDerivatives 4.0 International Public License ("CC BY-ND 4.0").
+
+The complete legal code of that license is incorporated into this file by
+reference and is available at:
+
+    https://creativecommons.org/licenses/by-nd/4.0/legalcode
+    https://creativecommons.org/licenses/by-nd/4.0/legalcode.txt   (plain text)
+
+A human-readable summary, which is not a substitute for the legal code, is at:
+
+    https://creativecommons.org/licenses/by-nd/4.0/
+
+SPDX-License-Identifier: CC-BY-ND-4.0
+
+In the event of any conflict between this file and the CC BY-ND 4.0 legal code,
+the legal code governs.
+
+
+-------------------------------------------------------------------------------
+What this means in practice
+-------------------------------------------------------------------------------
+This section is explanatory. It does not modify, extend or restrict the license.
+
+You are free to:
+
+  * Share -- copy and redistribute the Licensed Material in any medium or
+    format, in unadapted form, for any purpose, including commercially.
+
+  * Use the Licensed Material to conduct research: load it, query it, run
+    algorithms against it, and publish the results you obtain from it.
+    Producing and publishing research results from the data does not create
+    an adaptation of the data and is therefore not restricted by the
+    NoDerivatives term.
+
+Under the following terms:
+
+  * Attribution -- You must give appropriate credit, provide a link to the
+    license, and indicate if changes were made. For scientific use, satisfy
+    this by citing the publication associated with the instances you used, as
+    described in the "Citation" section of README.md.
+
+  * NoDerivatives -- If you remix, transform, or build upon the Licensed
+    Material, you may not distribute the modified material. Converting the
+    dumps to another format, filtering them, extending them, or extracting
+    parts of them and publishing the result -- for example as an entry in
+    another instance library -- constitutes distributing adapted material and
+    requires prior written permission from the Licensor.
+
+  * No additional restrictions -- You may not apply legal terms or
+    technological measures that legally restrict others from doing anything
+    the license permits.
+
+Notices:
+
+  * This license covers copyright and, where applicable, the sui generis
+    database rights held by the Licensor in the Licensed Material. It does not
+    grant rights in material the Licensor does not hold rights in.
+
+  * No warranties are given. The Licensed Material is provided "as is". The
+    Licensor makes no representations or warranties regarding the Licensed
+    Material, to the fullest extent permitted by applicable law.
+
+  * The license does not grant any trademark or publicity rights, and does not
+    imply endorsement by the Licensor of any use made of the Licensed Material.
+
+
+-------------------------------------------------------------------------------
+Citation is a separate obligation
+-------------------------------------------------------------------------------
+The attribution term above is a license condition. The citation requirement
+described in README.md is a scholarly norm. Both apply, and satisfying one does
+not discharge the other. This repository is not an independent scientific
+contribution and must not be cited as a standalone dataset; cite the
+publication corresponding to the instances you used.

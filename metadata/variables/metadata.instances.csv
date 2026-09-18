@@ -1,0 +1,4 @@
+﻿variable,data_type,unit,nullable,key,domain,description
+instance_batch_key,integer,-,no,FK,references metadata.instance_batches(key),"Batch this instance belongs to. ON DELETE CASCADE: deleting a batch deletes its instances and, transitively, all their raw_data rows."
+key,integer,-,no,PK,positive integer,"Surrogate primary key and the central join target of the dataset: every table in the raw_data schema references this column. Internal, not stable across releases."
+id,varchar(255),-,no,AK,"I<n>, e.g. 'I17'","Instance identifier within its batch. NOT globally unique -- the same value recurs in every batch. Uniqueness WITHIN a batch is enforced by the constraint UNIQUE (instance_batch_key, id). Reference an instance externally in the qualified form papers.id / instance_batches.id / instances.id, e.g. 'P5 / C100-CR0.2-TC0.2 / I17'."

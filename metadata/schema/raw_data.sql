@@ -1,0 +1,428 @@
+﻿-- =============================================================================
+-- Schema: raw_data
+-- =============================================================================
+-- Reference DDL for the `raw_data` schema of the Truck-and-Robot dataset.
+--
+-- Purpose of this file
+--   Documentation and reference. It describes the structure of the published
+--   database dump so that the dump can be understood, queried and validated
+--   without restoring it first. Restoring the dump (see examples/restore.md)
+--   recreates these objects; you do not need to run this file.
+--
+-- Scope
+--   `raw_data` holds the actual problem instances -- everything a solver/algorithm needs
+--   as input:
+--     - customers and their requests              -> raw_data.customers
+--     - depot, robot hubs, drop-off points        -> raw_data.network_locations
+--     - parcel pickup locations                   -> raw_data.pickup_locations
+--     - pairwise travel times and distances       -> raw_data.travel_matrices
+--     - vehicle catalog                           -> raw_data.vehicles
+--     - per-batch vehicle parametrization         -> raw_data.vehicle_parameters
+--
+--   Every location and request table references metadata.instances(key).
+--   raw_data.vehicle_parameters references metadata.instance_batches(key),
+--   because vehicle parametrization is shared by all instances of a batch.
+--
+-- Location identifiers
+--   Location ids are unique within an instance and follow these conventions:
+--     'DP'     truck depot              (network_locations, location_type 'Depot')
+--     'R-<n>'  robot hub                (network_locations, location_type 'Robot Hub')
+--     'S-<n>'  drop-off point           (network_locations, location_type 'Drop-off Point')
+--     'C-<n>'  regular customer         (customers, customer_type 'Regular')
+--     'CR-<n>' return customer          (customers, customer_type 'Return')
+--     'CP-<n>' pickup customer          (customers, customer_type 'Pickup')
+--     'P-<n>'  parcel pickup point      (pickup_locations)
+--   NOTE: drop-off points are 'S-', not 'D-', because of potentially future
+--   drone hubs; the only 'D' id is the depot's
+--   'DP'. Customers carry a TYPE-DEPENDENT prefix, so a filter of
+--   id LIKE 'C-%' silently drops every return and pickup request -- match on
+--   customer_type instead.
+--   raw_data.travel_matrices.start_location_id / end_location_id refer to this
+--   shared, per-instance identifier space spanning all three location tables.
+--   There is deliberately no foreign key on those columns, because the target
+--   may live in any of the three tables.
+--
+-- Units
+--   The database is STRICT SI, without exception:
+--     length / distance   m
+--     time / duration     s
+--     speed               m/s
+--     acceleration        m/s^2
+--     mass                kg
+--     area                m^2
+--   This includes monetary rates -- cost_per_distance is EUR/m and
+--   cost_per_time and delay_cost are EUR/s, NOT per km and per hour -- and the
+--   energy/emission model, whose parameters are stored in SI rather than in
+--   the units of the emission-model literature (J/kg not kJ/g, m^3 not L,
+--   J not kWh, W not kW). Feeding those columns into a published formula
+--   unchanged gives a result wrong by orders of magnitude.
+--   COORDINATES ARE THE ONE EXCEPTION and carry no unit at all: their scale is
+--   instance-set specific, differs between publications, and may be negative.
+--   Never derive a distance from coordinates -- use raw_data.travel_matrices.
+--   Every unit is documented per column in a COMMENT ON COLUMN and in
+--   metadata/variables/raw_data.vehicle_parameters.csv.
+--   See metadata/description.md, section "Units and conventions".
+--
+-- Sentinel values
+--   Robot availability and capacity columns are `double precision` rather than
+--   `integer` on purpose: they use IEEE-754 `Infinity` to denote "unlimited".
+--   Never cast them to integer -- integer cannot represent Infinity and the
+--   cast destroys the distinction between "unlimited" and an arbitrary bound.
+--   All finite values are whole numbers.
+--
+-- Notes
+--   Ownership, role, grant and tablespace statements are intentionally omitted;
+--   they are deployment-specific and not part of the dataset.
+-- =============================================================================
+
+CREATE SCHEMA IF NOT EXISTS raw_data;
+
+COMMENT ON SCHEMA raw_data IS
+    'Problem instances: customers, locations, travel matrices and vehicle '
+    'parametrization. This is the solver input of the dataset.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.customers
+-- -----------------------------------------------------------------------------
+-- One row per customer request of an instance.
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.customers
+(
+    key               integer          GENERATED BY DEFAULT AS IDENTITY,
+    id                varchar(50)      NOT NULL,
+    x_coordinate      double precision NOT NULL,
+    y_coordinate      double precision NOT NULL,
+    z_coordinate      double precision,
+    zone_restriction  text,
+    customer_type     varchar(50)      NOT NULL,
+    priority          integer,
+    parcel_demand     integer,
+    parcel_weight     double precision,
+    served_by         varchar(50),
+    time_window_start double precision,
+    time_window_end   double precision,
+    instance_key      integer          NOT NULL,
+    parcel_origin_id  varchar(50),
+
+    CONSTRAINT customers_pkey PRIMARY KEY (key),
+    CONSTRAINT customers_instance_key_fkey
+        FOREIGN KEY (instance_key) REFERENCES metadata.instances (key) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE  raw_data.customers                   IS 'One row per customer request of an instance.';
+COMMENT ON COLUMN raw_data.customers.key               IS 'Surrogate primary key. Internal, not stable across releases.';
+COMMENT ON COLUMN raw_data.customers.id                IS 'Customer identifier within the instance, e.g. ''C-17''. Referenced by raw_data.travel_matrices.';
+COMMENT ON COLUMN raw_data.customers.x_coordinate      IS 'Planar x coordinate, in a local Cartesian frame with origin at the lower-left corner of the service area.';
+COMMENT ON COLUMN raw_data.customers.y_coordinate      IS 'Planar y coordinate, same frame as x_coordinate.';
+COMMENT ON COLUMN raw_data.customers.z_coordinate      IS 'Elevation in m. NULL for instances with flat topography.';
+COMMENT ON COLUMN raw_data.customers.zone_restriction  IS 'Identifier of the access-restricted zone (e.g. low emission zone) containing this customer. NULL if unrestricted.';
+COMMENT ON COLUMN raw_data.customers.customer_type     IS 'Type of request: ''Regular'', ''Return'' or ''Pickup''. Determines which of the demand columns are populated and which id prefix the row carries (C-, CR-, CP-).';
+COMMENT ON COLUMN raw_data.customers.priority          IS 'Service priority; higher values denote higher urgency. NULL for batches with homogeneous priorities.';
+COMMENT ON COLUMN raw_data.customers.parcel_demand     IS 'Number of parcels requested by this customer.';
+COMMENT ON COLUMN raw_data.customers.parcel_weight     IS 'Total parcel weight in kg. NULL for batches in which weight is not modeled.';
+COMMENT ON COLUMN raw_data.customers.served_by         IS 'Vehicle class eligible to serve this customer: ''Robot'', ''Truck'' or ''Optional''. Note that the unconstrained case is the literal string ''Optional'', not NULL.';
+COMMENT ON COLUMN raw_data.customers.time_window_start IS 'Earliest service start in s, relative to the start of the planning horizon (t = 0). NULL if no time window applies.';
+COMMENT ON COLUMN raw_data.customers.time_window_end   IS 'Latest service start (deadline) in s, relative to the start of the planning horizon. NULL if no time window applies.';
+COMMENT ON COLUMN raw_data.customers.instance_key      IS 'Instance this customer belongs to.';
+COMMENT ON COLUMN raw_data.customers.parcel_origin_id  IS 'Location id where the parcel originates, e.g. ''DP'' for the truck depot or a pickup location id for pickup-and-delivery requests.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.network_locations
+-- -----------------------------------------------------------------------------
+-- One row per non-customer network node: the truck depot, robot hubs and
+-- drop-off points.
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.network_locations
+(
+    key                        integer          GENERATED BY DEFAULT AS IDENTITY,
+    id                         varchar(50)      NOT NULL,
+    x_coordinate               double precision NOT NULL,
+    y_coordinate               double precision NOT NULL,
+    z_coordinate               double precision,
+    zone_restriction           text,
+    location_type              varchar(50)      NOT NULL,
+    initial_robot_availability double precision,
+    max_robot_capacity         double precision,
+    charging_station           boolean          DEFAULT false,
+    instance_key               integer          NOT NULL,
+    time_window_start          double precision,
+    time_window_end            double precision,
+
+    CONSTRAINT network_locations_pkey PRIMARY KEY (key),
+    CONSTRAINT network_locations_instance_key_fkey
+        FOREIGN KEY (instance_key) REFERENCES metadata.instances (key) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE  raw_data.network_locations                            IS 'Non-customer network nodes: truck depot, robot hubs and drop-off points.';
+COMMENT ON COLUMN raw_data.network_locations.key                        IS 'Surrogate primary key. Internal, not stable across releases.';
+COMMENT ON COLUMN raw_data.network_locations.id                         IS 'Location identifier within the instance: ''DP'' for the depot, ''R-<n>'' for a robot hub, ''S-<n>'' for a drop-off point.';
+COMMENT ON COLUMN raw_data.network_locations.x_coordinate               IS 'Planar x coordinate, same frame as raw_data.customers.';
+COMMENT ON COLUMN raw_data.network_locations.y_coordinate               IS 'Planar y coordinate, same frame as raw_data.customers.';
+COMMENT ON COLUMN raw_data.network_locations.z_coordinate               IS 'Elevation in m. NULL for instances with flat topography.';
+COMMENT ON COLUMN raw_data.network_locations.zone_restriction           IS 'Identifier of the access-restricted zone containing this location. NULL if unrestricted.';
+COMMENT ON COLUMN raw_data.network_locations.location_type              IS 'Node role: ''Depot'', ''Robot Hub'' or ''Drop-off Point''.';
+COMMENT ON COLUMN raw_data.network_locations.initial_robot_availability IS 'Robots initially stationed at this location. Intentionally double precision: Infinity denotes unlimited availability. Do NOT cast to integer -- integer cannot represent Infinity and the cast would destroy data. All finite values are whole numbers.';
+COMMENT ON COLUMN raw_data.network_locations.max_robot_capacity         IS 'Maximum robots that can be held at this location. Intentionally double precision: Infinity denotes unlimited capacity. Do NOT cast to integer -- integer cannot represent Infinity and the cast would destroy data. All finite values are whole numbers.';
+COMMENT ON COLUMN raw_data.network_locations.charging_station           IS 'TRUE if robots can recharge at this location.';
+COMMENT ON COLUMN raw_data.network_locations.instance_key               IS 'Instance this location belongs to.';
+COMMENT ON COLUMN raw_data.network_locations.time_window_start          IS 'Earliest permitted service start at this location in s, relative to the start of the planning horizon (t = 0). NULL if no time window applies.';
+COMMENT ON COLUMN raw_data.network_locations.time_window_end            IS 'Latest permitted service start at this location in s, relative to the start of the planning horizon. NULL if no time window applies.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.pickup_locations
+-- -----------------------------------------------------------------------------
+-- One row per pickup location (parcel locker, micro-hub, shop) at which
+-- parcels originate or can be collected. Used by problem variants with
+-- pickup-and-delivery requests; empty for batches without them.
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.pickup_locations
+(
+    key               integer          GENERATED BY DEFAULT AS IDENTITY,
+    id                varchar(50)      NOT NULL,
+    x_coordinate      double precision NOT NULL,
+    y_coordinate      double precision NOT NULL,
+    z_coordinate      double precision,
+    zone_restriction  text,
+    location_type     varchar(50)      NOT NULL,
+    served_by         varchar(50),
+    charging_station  boolean          DEFAULT false,
+    time_window_start double precision,
+    time_window_end   double precision,
+    instance_key      integer          NOT NULL,
+
+    CONSTRAINT pickup_locations_pkey PRIMARY KEY (key),
+    CONSTRAINT pickup_locations_instance_key_fkey
+        FOREIGN KEY (instance_key) REFERENCES metadata.instances (key) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE  raw_data.pickup_locations                   IS 'Pickup locations at which parcels originate or can be collected. Populated only for problem variants with pickup-and-delivery requests.';
+COMMENT ON COLUMN raw_data.pickup_locations.key               IS 'Surrogate primary key. Internal, not stable across releases.';
+COMMENT ON COLUMN raw_data.pickup_locations.id                IS 'Pickup location identifier within the instance, e.g. ''P-3''. Referenced by raw_data.customers.parcel_origin_id and raw_data.travel_matrices.';
+COMMENT ON COLUMN raw_data.pickup_locations.x_coordinate      IS 'Planar x coordinate, same frame as raw_data.customers.';
+COMMENT ON COLUMN raw_data.pickup_locations.y_coordinate      IS 'Planar y coordinate, same frame as raw_data.customers.';
+COMMENT ON COLUMN raw_data.pickup_locations.z_coordinate      IS 'Elevation in m. NULL for instances with flat topography.';
+COMMENT ON COLUMN raw_data.pickup_locations.zone_restriction  IS 'Identifier of the access-restricted zone containing this location. NULL if unrestricted.';
+COMMENT ON COLUMN raw_data.pickup_locations.location_type     IS 'Kind of pickup location, e.g. ''Parcel Pickup Point''.';
+COMMENT ON COLUMN raw_data.pickup_locations.served_by         IS 'Vehicle class eligible to enter/serve this location: ''Robot'', ''Truck'' or ''Optional''. Note that the unconstrained case is the literal string ''Optional'', not NULL.';
+COMMENT ON COLUMN raw_data.pickup_locations.charging_station  IS 'TRUE if robots can recharge at this location.';
+COMMENT ON COLUMN raw_data.pickup_locations.time_window_start IS 'Earliest service start in s, relative to the start of the planning horizon. NULL if no time window applies.';
+COMMENT ON COLUMN raw_data.pickup_locations.time_window_end   IS 'Latest service start in s, relative to the start of the planning horizon. NULL if no time window applies.';
+COMMENT ON COLUMN raw_data.pickup_locations.instance_key      IS 'Instance this location belongs to.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.travel_matrices
+-- -----------------------------------------------------------------------------
+-- Pairwise travel data between all locations of an instance, precomputed
+-- separately for trucks and robots because the two use different networks
+-- (roads vs. sidewalks) and therefore different paths.
+--
+-- This is by far the largest table of the dataset. Filter by `instance_key`
+-- before joining anything else; see examples/example_queries.sql.
+--
+-- The matrix is not assumed symmetric and both directions are stored
+-- explicitly, so that one-way streets and altitude-dependent asymmetries can
+-- be represented. Self-pairs (start = end) are present with zero travel.
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.travel_matrices
+(
+    instance_key        integer          NOT NULL,
+    start_location_id   varchar(50)      NOT NULL,
+    end_location_id     varchar(50)      NOT NULL,
+    truck_time          double precision,
+    robot_time          double precision,
+    truck_distance      double precision,
+    robot_distance      double precision,
+    truck_emission      double precision,
+    robot_emission      double precision,
+    truck_altitude_up   double precision,
+    robot_altitude_up   double precision,
+    truck_altitude_down double precision,
+    robot_altitude_down double precision,
+
+    CONSTRAINT travel_matrices_pkey PRIMARY KEY (instance_key, start_location_id, end_location_id),
+    CONSTRAINT travel_matrices_instance_key_fkey
+        FOREIGN KEY (instance_key) REFERENCES metadata.instances (key) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE  raw_data.travel_matrices                     IS 'Pairwise travel times, distances, emissions and altitude profiles per instance, separately for trucks and robots.';
+COMMENT ON COLUMN raw_data.travel_matrices.instance_key        IS 'Instance this matrix entry belongs to. Always filter on this column first.';
+COMMENT ON COLUMN raw_data.travel_matrices.start_location_id   IS 'Origin location id. Refers to the per-instance identifier space spanned by raw_data.customers, raw_data.network_locations and raw_data.pickup_locations.';
+COMMENT ON COLUMN raw_data.travel_matrices.end_location_id     IS 'Destination location id, same identifier space as start_location_id.';
+COMMENT ON COLUMN raw_data.travel_matrices.truck_time          IS 'Truck travel time in s. NULL if the truck cannot traverse this pair.';
+COMMENT ON COLUMN raw_data.travel_matrices.robot_time          IS 'Robot travel time in s. NULL if the robot cannot traverse this pair.';
+COMMENT ON COLUMN raw_data.travel_matrices.truck_distance      IS 'Truck travel distance in m along the road network. NULL if the truck cannot traverse this pair.';
+COMMENT ON COLUMN raw_data.travel_matrices.robot_distance      IS 'Robot travel distance in m along the sidewalk network. Generally exceeds the straight-line distance and is not derivable from the coordinates.';
+COMMENT ON COLUMN raw_data.travel_matrices.truck_emission      IS 'Truck CO2-equivalent emissions in kg for this pair.';
+COMMENT ON COLUMN raw_data.travel_matrices.robot_emission      IS 'Robot CO2-equivalent emissions in kg for this pair.';
+COMMENT ON COLUMN raw_data.travel_matrices.truck_altitude_up   IS 'Cumulative ascent in m along the truck path.';
+COMMENT ON COLUMN raw_data.travel_matrices.robot_altitude_up   IS 'Cumulative ascent in m along the robot path.';
+COMMENT ON COLUMN raw_data.travel_matrices.truck_altitude_down IS 'Cumulative descent in m along the truck path, reported as a positive magnitude.';
+COMMENT ON COLUMN raw_data.travel_matrices.robot_altitude_down IS 'Cumulative descent in m along the robot path, reported as a positive magnitude.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.vehicles
+-- -----------------------------------------------------------------------------
+-- Catalog of vehicle types referenced by raw_data.vehicle_parameters.
+-- Small and stable; the numeric parametrization lives in vehicle_parameters
+-- because it differs per instance batch.
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.vehicles
+(
+    key          integer     GENERATED ALWAYS AS IDENTITY,
+    id           varchar(100) NOT NULL,
+    vehicle_type text         NOT NULL,
+    description  text,
+
+    CONSTRAINT vehicles_pkey      PRIMARY KEY (key),
+    CONSTRAINT vehicles_id_unique UNIQUE (id)
+);
+
+COMMENT ON TABLE  raw_data.vehicles              IS 'Catalog of vehicle types used across instance batches.';
+COMMENT ON COLUMN raw_data.vehicles.key          IS 'Surrogate primary key. Internal, not stable across releases.';
+COMMENT ON COLUMN raw_data.vehicles.id           IS 'Stable vehicle identifier, e.g. ''diesel_truck'', ''e_truck'', ''sc_robot''.';
+COMMENT ON COLUMN raw_data.vehicles.vehicle_type IS 'Broad vehicle class: ''Ground'' for trucks, ''Autonomous'' for robots.';
+COMMENT ON COLUMN raw_data.vehicles.description  IS 'Free-text description of the vehicle.';
+
+
+-- -----------------------------------------------------------------------------
+-- raw_data.vehicle_parameters
+-- -----------------------------------------------------------------------------
+-- Numeric parametrization of one vehicle type within one instance batch.
+-- Keyed by (instance_batch_key, vehicle_key): all instances of a batch share
+-- the same vehicle parameters.
+--
+-- Columns fall into three groups:
+--   1. capacity and cost          -- SI: EUR/m, EUR/s, NOT EUR/km and EUR/h
+--   2. kinematics and time        -- SI: m/s, m/s^2, s
+--   3. energy and emission model  -- parameters of a comprehensive modal
+--                                    emission model, stored in SI rather than
+--                                    in that literature's units. A published
+--                                    formula therefore does NOT apply to these
+--                                    columns unchanged -- convert first.
+--
+-- A parameter that is not modeled in a given batch is NULL. NULL therefore
+-- means "not applicable to this batch", never "zero".
+-- -----------------------------------------------------------------------------
+CREATE TABLE raw_data.vehicle_parameters
+(
+    instance_batch_key             integer          NOT NULL,
+    vehicle_key                    integer          NOT NULL,
+
+    -- capacity ---------------------------------------------------------------
+    max_robots                     integer,
+    initial_robots                 integer,
+    max_parcels                    integer,
+    initial_parcels                integer,
+
+    -- cost -------------------------------------------------------------------
+    cost_per_distance              double precision,
+    cost_per_energy                double precision,
+    cost_per_time                  double precision,
+    delay_cost                     double precision,
+
+    -- emission conversion ----------------------------------------------------
+    fuel_to_emission_factor        double precision,
+    energy_to_emission_factor      double precision,
+    emission_to_cost_factor        double precision,
+
+    -- service and interruptions ----------------------------------------------
+    service_time                   double precision,
+    time_per_interruption          double precision,
+    interruption_rate              double precision,
+
+    -- kinematics -------------------------------------------------------------
+    speed_min                      double precision,
+    speed_max                      double precision,
+    acceleration                   double precision,
+    deceleration                   double precision,
+
+    -- mass and geometry ------------------------------------------------------
+    curb_weight                    double precision,
+    rotation_mass_factor           double precision,
+    max_load                       double precision,
+    max_distance                   double precision,
+    frontal_area                   double precision,
+
+    -- combustion engine model ------------------------------------------------
+    fuel_air_mass_ratio            double precision,
+    engine_friction_factor         double precision,
+    engine_speed                   double precision,
+    engine_displacement            double precision,
+    fuel_heating_value             double precision,
+    fuel_density                   double precision,
+    engine_efficiency              double precision,
+    drivetrain_efficiency          double precision,
+
+    -- electric drive and recuperation ----------------------------------------
+    recuperated_kinetic_energy     double precision,
+    recuperated_descent_energy     double precision,
+    auxiliary_power_draw           double precision,
+    battery_capacity               double precision,
+    charging_rate                  double precision,
+    energy_consumption             double precision,
+
+    -- resistance and environment ---------------------------------------------
+    drag_coefficient               double precision,
+    rolling_resistance_coefficient double precision,
+    air_density                    double precision,
+    gravity_constant               double precision,
+
+    CONSTRAINT vehicle_parameters_pkey PRIMARY KEY (instance_batch_key, vehicle_key),
+    CONSTRAINT vehicle_parameters_instance_batch_key_fkey
+        FOREIGN KEY (instance_batch_key) REFERENCES metadata.instance_batches (key) ON DELETE CASCADE,
+    CONSTRAINT vehicle_parameters_vehicle_key_fkey
+        FOREIGN KEY (vehicle_key) REFERENCES raw_data.vehicles (key) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE raw_data.vehicle_parameters IS
+    'Numeric parametrization of one vehicle type within one instance batch. '
+    'NULL means the parameter is not modeled in that batch, not zero.';
+
+COMMENT ON COLUMN raw_data.vehicle_parameters.instance_batch_key             IS 'Instance batch this parametrization applies to. All instances of the batch share it.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.vehicle_key                    IS 'Vehicle type being parametrized.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.max_robots                     IS 'Maximum number of robots carried on the truck [-]. NULL for robots.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.initial_robots                 IS 'Number of robots on the truck at the depot [-]. NULL for robots.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.max_parcels                    IS 'Maximum number of parcels carried [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.initial_parcels                IS 'Number of parcels loaded at the depot [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.cost_per_distance              IS 'Distance-dependent cost [EUR/m]. SI, not EUR/km: 0.2 EUR/km is stored as 0.0002.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.cost_per_energy                IS 'Energy cost [EUR/J]. SI, not EUR/kWh.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.cost_per_time                  IS 'Time-dependent cost, e.g. driver wage [EUR/s]. SI, not EUR/h: 30 EUR/h is stored as 0.008333333333333333.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.delay_cost                     IS 'Penalty cost per unit of delay beyond a deadline [EUR/s]. SI, not EUR/h: 5 EUR/h is stored as 0.001388888888888889.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.fuel_to_emission_factor        IS 'Conversion from fuel consumption to CO2-equivalent emissions [kg/m^3]. SI, not kg/L.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.energy_to_emission_factor      IS 'Conversion from energy consumption to CO2-equivalent emissions [kg/J]. SI, not kg/kWh.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.emission_to_cost_factor        IS 'Monetary valuation of emissions [EUR/kg].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.service_time                   IS 'Handling/service time per served request or for releasing robots [s].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.time_per_interruption          IS 'Duration of a single interruption stop [s].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.interruption_rate              IS 'Expected number of interruption stops per unit of distance [m]. E.g. an interruption every 50 m';
+COMMENT ON COLUMN raw_data.vehicle_parameters.speed_min                      IS 'Minimum travel speed [m/s].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.speed_max                      IS 'Maximum travel speed [m/s].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.acceleration                   IS 'Acceleration [m/s^2].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.deceleration                   IS 'Deceleration, reported as a positive magnitude [m/s^2].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.curb_weight                    IS 'Empty vehicle weight [kg].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.rotation_mass_factor           IS 'Rotating-mass correction factor [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.max_load                       IS 'Maximum payload [kg].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.max_distance                   IS 'Maximum distance per tour [m].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.frontal_area                   IS 'Frontal surface area [m^2].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.fuel_air_mass_ratio            IS 'Fuel-to-air mass ratio [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.engine_friction_factor         IS 'Engine friction factor [J/m^3]. SI, not kJ/(rev*L).';
+COMMENT ON COLUMN raw_data.vehicle_parameters.engine_speed                   IS 'Engine speed [1/s].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.engine_displacement            IS 'Engine displacement [m^3]. SI, not L: a 3 L engine is 0.003 m^3.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.fuel_heating_value             IS 'Lower heating value of the fuel [J/kg]. SI, not kJ/g.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.fuel_density                   IS 'Fuel density [kg/m^3]. SI, not g/L.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.engine_efficiency              IS 'Engine efficiency parameter [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.drivetrain_efficiency          IS 'Drivetrain efficiency [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.recuperated_kinetic_energy     IS 'Share of kinetic energy recovered when braking [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.recuperated_descent_energy     IS 'Share of potential energy recovered when descending [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.auxiliary_power_draw           IS 'Power draw of auxiliary systems [W]. SI, not kW.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.battery_capacity               IS 'Usable battery capacity [J]. SI, not kWh. Infinity denotes a non-binding battery, i.e. energy is not a limiting resource in this batch.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.charging_rate                  IS 'Charging power [W]. SI, not kW. Infinity denotes instantaneous recharging.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.energy_consumption             IS 'Distance-specific energy consumption [J/m]. SI, not kWh/m. Used when the detailed emission model is not applied.';
+COMMENT ON COLUMN raw_data.vehicle_parameters.drag_coefficient               IS 'Aerodynamic drag coefficient [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.rolling_resistance_coefficient IS 'Rolling resistance coefficient [-].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.air_density                    IS 'Air density [kg/m^3].';
+COMMENT ON COLUMN raw_data.vehicle_parameters.gravity_constant               IS 'Gravitational acceleration [m/s^2].';
